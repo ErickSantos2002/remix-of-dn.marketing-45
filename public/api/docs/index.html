@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>dnMarketing API — Swagger UI</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.18.2/swagger-ui.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0f;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    /* Top bar */
+    .topbar-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .topbar-wrapper img { display: none; }
+    .topbar-wrapper::before {
+      content: 'dnMarketing API';
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.5px;
+    }
+
+    /* Dark theme overrides */
+    .swagger-ui {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .swagger-ui .topbar { background: #12121a; border-bottom: 1px solid #1e1e2e; padding: 12px 24px; }
+    .swagger-ui .info { margin: 30px 0; }
+    .swagger-ui .info .title { color: #f1f5f9; font-size: 26px; }
+    .swagger-ui .info .description p { color: #94a3b8; }
+    .swagger-ui .info a { color: #818cf8; }
+
+    /* Scheme container */
+    .swagger-ui .scheme-container { background: #12121a; border: 1px solid #1e1e2e; box-shadow: none; }
+    .swagger-ui .scheme-container .schemes > label { color: #94a3b8; }
+
+    /* Operations */
+    .swagger-ui .opblock { border-radius: 8px; border: 1px solid #1e1e2e; margin-bottom: 12px; }
+    .swagger-ui .opblock .opblock-summary { border: none; padding: 10px 16px; }
+    .swagger-ui .opblock .opblock-summary-method { border-radius: 6px; font-size: 12px; font-weight: 700; min-width: 60px; }
+    .swagger-ui .opblock .opblock-summary-path { color: #e2e8f0; font-size: 14px; }
+    .swagger-ui .opblock .opblock-summary-description { color: #94a3b8; }
+
+    /* GET */
+    .swagger-ui .opblock.opblock-get { background: rgba(16, 185, 129, 0.05); border-color: rgba(16, 185, 129, 0.2); }
+    .swagger-ui .opblock.opblock-get .opblock-summary-method { background: #10b981; }
+    .swagger-ui .opblock.opblock-get .opblock-summary { border-color: transparent; }
+
+    /* POST */
+    .swagger-ui .opblock.opblock-post { background: rgba(59, 130, 246, 0.05); border-color: rgba(59, 130, 246, 0.2); }
+    .swagger-ui .opblock.opblock-post .opblock-summary-method { background: #3b82f6; }
+    .swagger-ui .opblock.opblock-post .opblock-summary { border-color: transparent; }
+
+    /* Inner content */
+    .swagger-ui .opblock-body { background: #0d0d14; }
+    .swagger-ui .opblock-description-wrapper p,
+    .swagger-ui .opblock-external-docs-wrapper p { color: #94a3b8; }
+    .swagger-ui table thead tr td, .swagger-ui table thead tr th { color: #94a3b8; border-color: #1e1e2e; }
+    .swagger-ui table tbody tr td { color: #e2e8f0; border-color: #1e1e2e; }
+    .swagger-ui .parameter__name { color: #818cf8; }
+    .swagger-ui .parameter__type { color: #94a3b8; }
+    .swagger-ui .parameter__in { color: #64748b; }
+
+    /* Models */
+    .swagger-ui section.models { border: 1px solid #1e1e2e; border-radius: 8px; }
+    .swagger-ui section.models h4 { color: #e2e8f0; border-color: #1e1e2e; }
+    .swagger-ui section.models .model-container { background: #0d0d14; }
+    .swagger-ui .model-title { color: #e2e8f0; }
+    .swagger-ui .model { color: #94a3b8; }
+    .swagger-ui .prop-type { color: #818cf8; }
+
+    /* Response */
+    .swagger-ui .responses-inner h4, .swagger-ui .responses-inner h5 { color: #e2e8f0; }
+    .swagger-ui .response-col_status { color: #e2e8f0; }
+    .swagger-ui .response-col_description { color: #94a3b8; }
+    .swagger-ui .responses-table .response-col_description__inner p { color: #94a3b8; }
+
+    /* Code blocks */
+    .swagger-ui .highlight-code { background: #1e1e2e !important; border-radius: 6px; }
+    .swagger-ui .microlight { background: #1e1e2e !important; color: #a9b1d6 !important; border-radius: 6px; font-size: 12px; }
+    .swagger-ui .example { color: #a9b1d6; }
+    .swagger-ui textarea { background: #1e1e2e; color: #e2e8f0; border-color: #2d2d3d; }
+    .swagger-ui select { background: #1e1e2e; color: #e2e8f0; border-color: #2d2d3d; }
+    .swagger-ui input[type=text] { background: #1e1e2e; color: #e2e8f0; border-color: #2d2d3d; }
+
+    /* Buttons */
+    .swagger-ui .btn { border-radius: 6px; }
+    .swagger-ui .btn.execute { background: #818cf8; border-color: #818cf8; color: #fff; }
+    .swagger-ui .btn.authorize { background: transparent; border-color: #818cf8; color: #818cf8; }
+    .swagger-ui .btn.authorize svg { fill: #818cf8; }
+
+    /* Auth dialog */
+    .swagger-ui .dialog-ux .modal-ux { background: #12121a; border: 1px solid #1e1e2e; }
+    .swagger-ui .dialog-ux .modal-ux-header { border-color: #1e1e2e; }
+    .swagger-ui .dialog-ux .modal-ux-header h3 { color: #e2e8f0; }
+    .swagger-ui .dialog-ux .modal-ux-content p { color: #94a3b8; }
+
+    /* Tags */
+    .swagger-ui .opblock-tag { color: #e2e8f0; border-color: #1e1e2e; }
+    .swagger-ui .opblock-tag small { color: #64748b; }
+    .swagger-ui .opblock-tag:hover { background: rgba(255,255,255,0.03); }
+
+    /* Arrow icons */
+    .swagger-ui svg.arrow { fill: #94a3b8; }
+    .swagger-ui .expand-operation svg { fill: #64748b; }
+
+    /* Tab headers */
+    .swagger-ui .tab li { color: #94a3b8; }
+    .swagger-ui .tab li.active { color: #e2e8f0; }
+
+    /* Loading */
+    .swagger-ui .loading-container { background: #0a0a0f; }
+    .swagger-ui .loading-container .loading::after { color: #818cf8; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0a0a0f; }
+    ::-webkit-scrollbar-thumb { background: #2d2d3d; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3d3d4d; }
+
+    /* Footer link */
+    .footer-link {
+      text-align: center;
+      padding: 24px;
+      border-top: 1px solid #1e1e2e;
+      margin-top: 40px;
+    }
+    .footer-link a {
+      color: #818cf8;
+      text-decoration: none;
+      font-size: 13px;
+    }
+    .footer-link a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <div class="footer-link">
+    <a href="/adnia/settings" target="_blank">← Voltar para o painel dnMarketing</a>
+  </div>
+
+  <script src="https://unpkg.com/swagger-ui-dist@5.18.2/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.18.2/swagger-ui-standalone-preset.js"></script>
+  <script>
+    window.onload = () => {
+      window.ui = SwaggerUIBundle({
+        url: '../dnmarketing-api.yaml',
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset,
+        ],
+        plugins: [SwaggerUIBundle.plugins.DownloadUrl],
+        layout: 'StandaloneLayout',
+        defaultModelsExpandDepth: 1,
+        defaultModelExpandDepth: 2,
+        docExpansion: 'list',
+        filter: true,
+        tryItOutEnabled: false,
+      });
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+email;nome;whatsapp;cargo;empresa;faturamento;funcionarios;desafios;source;status;tipo
+joao.silva@empresa.com.br;João Silva;(11) 98765-4321;CEO / Fundador;Empresa Exemplo;100k-500k;11-25;Aumentar geração de leads qualificados;site;Lead;csv_import
+maria.santos@startup.com;Maria Santos;(21) 99876-5432;Diretor;Startup BR;10k-50k;2-10;Automatizar atendimento ao cliente;meta;Lead Qualificado;csv_import
+carlos.oliveira@negocio.com;Carlos Oliveira;(31) 91234-5678;Gerente;Negócio Ltda;500k-1mm;26-49;Criar conteúdo com IA;google;MQL - Reunião agendada;csv_import
+ana.pereira@corporacao.com;Ana Pereira;(41) 98765-1234;Analista;Corporação SA;acima-5mm;100+;Reduzir custos de operação;indicacao;SQL - Em negociação;csv_import

@@ -1,0 +1,1973 @@
+openapi: '3.0.3'
+info:
+  title: dnMarketing API
+  version: '2.0.0'
+  description: |
+    O dnMarketing é o master de identidade do ecossistema DN.IA.
+    Esta API permite que o Nexus, mentor.ia e agentes de IA se integrem para
+    gerenciar contatos, segmentos, campanhas, páginas, automações e analytics.
+  contact:
+    name: DN.IA
+    url: https://dnia.ai
+
+servers:
+  - url: https://{project_id}.supabase.co/functions/v1
+    description: Produção
+    variables:
+      project_id:
+        default: '[PROJECT_ID]'
+        description: ID do projeto Supabase
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        A API aceita dois tipos de autenticação via Bearer token:
+        1. WEBHOOK_SECRET — chave master configurada nos Secrets do projeto.
+        2. API Keys — chaves individuais no formato dnk_[32 chars], criadas em Settings → API Keys.
+        
+        Permissões das API Keys:
+        - read: endpoints GET
+        - write: endpoints POST/PATCH
+        - read_write: acesso completo (padrão)
+        
+        Header: Authorization: Bearer <token>
+
+  schemas:
+    EcosystemIdentity:
+      type: object
+      properties:
+        dnia_id:
+          type: string
+          format: uuid
+        phone:
+          type: string
+          example: '+5511999999999'
+        email:
+          type: string
+          format: email
+        nome:
+          type: string
+        stage:
+          type: string
+          enum: [lead, opportunity, client]
+        first_touch_source:
+          type: string
+        first_touch_app:
+          type: string
+        dndash_lead_id:
+          type: string
+          format: uuid
+          nullable: true
+        nexus_contact_id:
+          type: string
+          format: uuid
+          nullable: true
+        mentoria_client_id:
+          type: string
+          format: uuid
+          nullable: true
+        last_seen_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    LeadDetails:
+      type: object
+      properties:
+        cargo:
+          type: string
+          nullable: true
+        faturamento:
+          type: string
+          nullable: true
+        funcionarios:
+          type: string
+          nullable: true
+        etiqueta:
+          type: string
+          enum: [hotlead, warm, raw]
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        utm_source:
+          type: string
+          nullable: true
+        utm_campaign:
+          type: string
+          nullable: true
+        page_slug:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ContactListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        dnia_id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        email:
+          type: string
+        whatsapp:
+          type: string
+        cargo:
+          type: string
+        faturamento:
+          type: string
+        etiqueta:
+          type: string
+        status:
+          type: string
+        stage:
+          type: string
+        utm_source:
+          type: string
+        page_slug:
+          type: string
+        nexus_contact_id:
+          type: string
+          nullable: true
+        mentoria_client_id:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        pages:
+          type: integer
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+    Conversion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        lead_id:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+          example: modal_pago
+        page_slug:
+          type: string
+          example: pago
+        converted_at:
+          type: string
+          format: date-time
+        session_id:
+          type: string
+          nullable: true
+        utm_source:
+          type: string
+          nullable: true
+        utm_medium:
+          type: string
+          nullable: true
+        utm_campaign:
+          type: string
+          nullable: true
+        utm_term:
+          type: string
+          nullable: true
+        utm_content:
+          type: string
+          nullable: true
+        source:
+          type: string
+          nullable: true
+          example: programadeiaficacao
+          description: Origem da conversão
+        created_at:
+          type: string
+          format: date-time
+
+paths:
+  /identity-lookup:
+    get:
+      operationId: identityLookup
+      summary: Buscar identidade
+      description: Busca uma identidade unificada por telefone, email ou dnia_id.
+      tags:
+        - Identidade
+      parameters:
+        - name: phone
+          in: query
+          schema:
+            type: string
+          description: Telefone no formato +55...
+        - name: email
+          in: query
+          schema:
+            type: string
+          description: Email do contato
+        - name: dnia_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: DN.IA ID do ecossistema
+      responses:
+        '200':
+          description: Identidade encontrada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/EcosystemIdentity'
+                  - type: object
+                    properties:
+                      lead:
+                        $ref: '#/components/schemas/LeadDetails'
+        '400':
+          description: Nenhum parâmetro de busca informado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Token inválido ou ausente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Identidade não encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /lead-capture:
+    post:
+      operationId: leadCapture
+      summary: Captura de lead (formulários públicos)
+      description: |
+        Endpoint usado pelos formulários públicos do site para criar/atualizar leads.
+        Resolve a identidade automaticamente (gera/encontra `dnia_id`).
+        Idempotente por `email`: se já existir lead com o mesmo email, atualiza.
+      tags:
+        - Leads
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+                sessionId:
+                  type: string
+                  maxLength: 100
+                fields:
+                  type: object
+                  description: |
+                    Campos do lead. Apenas as chaves abaixo (whitelist) são aceitas;
+                    qualquer outra é silenciosamente descartada.
+                  properties:
+                    nome: { type: string }
+                    whatsapp: { type: string, description: "BR no formato (DD) 9XXXX-XXXX" }
+                    cargo: { type: string }
+                    empresa: { type: string }
+                    faturamento: { type: string }
+                    funcionarios: { type: string }
+                    desafios: { type: string }
+                    tipo: { type: string }
+                    tipo_participante: { type: string }
+                    source: { type: string, description: "Origem de negócio (ex: nome da landing)" }
+                    presenca: { type: string }
+                    origem_campanha: { type: string }
+                    indicacao: { type: string }
+                    interesse_formacao: { type: string }
+                    interesse_ecossistema: { type: string }
+                    interesse_mtia: { type: string }
+                    data_interesse: { type: string }
+                    status: { type: string }
+                    utm_source: { type: string }
+                    utm_medium: { type: string }
+                    utm_campaign: { type: string }
+                    utm_term: { type: string }
+                    utm_content: { type: string }
+      responses:
+        '200':
+          description: Lead criado ou atualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  dnia_id: { type: string, format: uuid }
+                  phone_normalized: { type: string, nullable: true }
+                  etiqueta: { type: string, nullable: true }
+        '400':
+          description: "Dados inválidos (ex: email ausente)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+
+  /identity-upsert:
+    post:
+      operationId: identityUpsert
+      summary: Criar ou atualizar identidade
+      description: |
+        Cria uma nova identidade ou atualiza uma existente.
+        
+        **Merge automático:** Se o telefone informado pertence a uma identidade e o email
+        pertence a outra, o sistema automaticamente mescla os dois registros, mantendo o
+        DNIA_ID mais antigo. Nesse caso, a resposta inclui `merged: true` e `merged_from`.
+      tags:
+        - Identidade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - source_app
+                - local_id
+              properties:
+                phone:
+                  type: string
+                email:
+                  type: string
+                nome:
+                  type: string
+                source_app:
+                  type: string
+                  enum: [nexus, mentoria, dnmarketing, website]
+                  description: Aplicação de origem do contato.
+                local_id:
+                  type: string
+                  format: uuid
+                stage:
+                  type: string
+                  enum: [lead, opportunity, client]
+                source:
+                  type: string
+                  description: "Origem de negócio (ex: nome da landing). Quando o lead for criado, grava em `leads.source`; em lead existente só preenche se estiver vazio."
+                utm_source:
+                  type: string
+                  description: UTM source. Grava em `leads.utm_source` (na criação) e em `ecosystem_identities.first_touch_source` (apenas na primeira aparição).
+                utm_medium:
+                  type: string
+                utm_campaign:
+                  type: string
+                utm_term:
+                  type: string
+                utm_content:
+                  type: string
+                ab_vid:
+                  type: string
+                  description: "ID anônimo do visitante do Teste A/B. Costurado a `ab_identities` (histórico — nunca sobrescreve). Aceito no top-level ou dentro de `metadata`."
+                ab_test:
+                  type: string
+                  description: Slug do teste A/B.
+                ab_var:
+                  type: string
+                  description: Variante atribuída (A, B, ...).
+                contact_fields:
+                  type: object
+                  description: |
+                    Campos de qualificação para enriquecer o lead. Modo enriquecimento:
+                    só grava se o campo estiver vazio no banco (não sobrescreve).
+                    Para sobrescrever, use PATCH /contact-update.
+                  properties:
+                    cargo: { type: string }
+                    empresa: { type: string }
+                    faturamento: { type: string }
+                    funcionarios: { type: string }
+                    desafios: { type: string }
+                metadata:
+                  type: object
+                  description: |
+                    Objeto livre para metadados adicionais. Pode conter `contact_fields`
+                    (mesma semântica do parâmetro top-level) para compatibilidade.
+
+      responses:
+        '200':
+          description: Identidade criada, atualizada ou mesclada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dnia_id:
+                    type: string
+                    format: uuid
+                  is_new:
+                    type: boolean
+                  merged:
+                    type: boolean
+                  merged_from:
+                    type: string
+                    format: uuid
+                    nullable: true
+                  stage:
+                    type: string
+                  phone_normalized:
+                    type: string
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Token inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /merge-identities:
+    post:
+      operationId: mergeIdentities
+      summary: Mesclar duas identidades
+      description: Unifica dois registros mantendo o keep_id. Re-aponta leads, eventos e campanhas.
+      tags:
+        - Identidade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - keep_id
+                - discard_id
+              properties:
+                keep_id:
+                  type: string
+                  format: uuid
+                discard_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Identidades mescladas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dnia_id:
+                    type: string
+                    format: uuid
+                  merged_from:
+                    type: string
+                    format: uuid
+                  stage:
+                    type: string
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Token inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /contacts-list:
+    get:
+      operationId: contactsList
+      summary: Listar contatos
+      description: Lista leads com filtros, busca e paginação.
+      tags:
+        - Contatos
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Busca por nome, email ou telefone
+        - name: etiqueta
+          in: query
+          schema:
+            type: string
+          description: Filtro por etiqueta
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: Status do lead
+        - name: stage
+          in: query
+          schema:
+            type: string
+          description: Stage no ecossistema
+        - name: created_after
+          in: query
+          schema: { type: string, format: date-time }
+          description: "Filtra leads criados após esta data (ISO 8601 ou YYYY-MM-DD interpretado no `tz`)."
+        - name: created_before
+          in: query
+          schema: { type: string, format: date-time }
+          description: "Filtra leads criados antes desta data."
+        - name: updated_after
+          in: query
+          schema: { type: string, format: date-time }
+          description: "Filtra leads atualizados após esta data."
+        - name: updated_before
+          in: query
+          schema: { type: string, format: date-time }
+          description: "Filtra leads atualizados antes desta data."
+        - name: status_changed_after
+          in: query
+          schema: { type: string, format: date-time }
+          description: "Filtra leads cujo último evento de mudança de status ocorreu após esta data."
+        - name: tz
+          in: query
+          schema: { type: string, default: America/Sao_Paulo }
+          description: "Timezone IANA usado para interpretar parâmetros YYYY-MM-DD."
+        - name: cursor
+          in: query
+          schema: { type: string }
+          description: "Cursor opaco (base64). Ative paginação por cursor para bases grandes (até limit=500). Sem cursor, usa page/limit clássicos."
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: "Ignorado quando `cursor` é informado."
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 500
+          description: "Máx 100 sem cursor, 500 com cursor."
+      responses:
+        '200':
+          description: Lista de contatos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ContactListItem'
+                  pagination:
+                    oneOf:
+                      - $ref: '#/components/schemas/Pagination'
+                      - type: object
+                        properties:
+                          limit: { type: integer }
+                          next_cursor: { type: string, nullable: true }
+                          has_more: { type: boolean }
+        '401':
+          description: Token inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /receive-contact-event:
+    post:
+      operationId: receiveContactEvent
+      summary: Registrar evento na timeline
+      description: |
+        Registra um evento na timeline unificada do contato.
+        O evento deal_won avança o stage automaticamente para "client".
+      tags:
+        - Eventos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - source_app
+                - event_type
+                - title
+              properties:
+                phone:
+                  type: string
+                email:
+                  type: string
+                dnia_id:
+                  type: string
+                  format: uuid
+                source_app:
+                  type: string
+                  enum: [nexus, mentoria, dnmarketing, website]
+                  description: Aplicação de origem do evento.
+                event_type:
+                  type: string
+                  enum:
+                    - opportunity_created
+                    - meeting_scheduled
+                    - deal_moved
+                    - proposal_sent
+                    - deal_won
+                    - deal_lost
+                    - onboarding_started
+                    - onboarding_completed
+                    - health_updated
+                    - checkin_done
+                title:
+                  type: string
+                description:
+                  type: string
+                contact_fields:
+                  type: object
+                  description: |
+                    Enriquece o lead vinculado com campos de qualificação.
+                    Modo enriquecimento: só grava se o campo estiver vazio.
+                  properties:
+                    cargo: { type: string }
+                    empresa: { type: string }
+                    faturamento: { type: string }
+                    funcionarios: { type: string }
+                    desafios: { type: string }
+                ab_vid:
+                  type: string
+                  description: "ID anônimo do visitante do Teste A/B. Em `meeting_scheduled`/`scheduling_widget_booked` registra a conversão `agendamento` em `ab_events`. Aceito no top-level ou dentro de `metadata`."
+                ab_test:
+                  type: string
+                  description: Slug do teste A/B.
+                ab_var:
+                  type: string
+                  description: Variante atribuída (A, B, ...).
+                metadata:
+                  type: object
+                  description: |
+                    Objeto livre. Pode conter `contact_fields` (mesma semântica do top-level)
+                    e/ou `ab_vid`/`ab_test`/`ab_var` do Teste A/B.
+                occurred_at:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Evento registrado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  event_id:
+                    type: string
+                    format: uuid
+                  dnia_id:
+                    type: string
+                    format: uuid
+        '401':
+          description: Token inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Contato não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /contact-details:
+    get:
+      operationId: contactDetails
+      summary: Contexto completo de um contato
+      description: |
+        Retorna tudo sobre um contato em uma única chamada: identidade, dados do lead,
+        score, tags, notas, timeline, conversões, campanhas e presença no ecossistema.
+      tags:
+        - Contatos
+      parameters:
+        - name: phone
+          in: query
+          schema:
+            type: string
+        - name: email
+          in: query
+          schema:
+            type: string
+        - name: dnia_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Contexto completo do contato
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dnia_id:
+                    type: string
+                    format: uuid
+                  stage:
+                    type: string
+                  lead:
+                    type: object
+                    nullable: true
+                  scoring:
+                    type: object
+                    nullable: true
+                  tags:
+                    type: array
+                    items:
+                      type: object
+                  status_history:
+                    type: array
+                    description: |
+                      Histórico de transições de status inferido a partir dos eventos.
+                      Funciona retroativamente para toda a base.
+                    items:
+                      type: object
+                      properties:
+                        from: { type: string, example: "Lead" }
+                        to: { type: string, example: "MQL - Reunião agendada" }
+                        at: { type: string, format: date-time }
+                        source_app: { type: string }
+                        event_type: { type: string }
+                  timeline:
+                    type: array
+                    items:
+                      type: object
+                  campaigns_received:
+                    type: array
+                    items:
+                      type: object
+        '404':
+          description: Contato não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /contact-update:
+    patch:
+      operationId: contactUpdate
+      summary: Atualizar contato
+      description: |
+        Atualiza campos do lead, gerencia tags e adiciona notas. Registra evento
+        contact_updated na timeline. Requer permissão write.
+      tags:
+        - Contatos
+      parameters:
+        - name: phone
+          in: query
+          schema:
+            type: string
+          description: Telefone do contato
+        - name: email
+          in: query
+          schema:
+            type: string
+          description: Email do contato
+        - name: dnia_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: DN.IA ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                nome:
+                  type: string
+                cargo:
+                  type: string
+                whatsapp:
+                  type: string
+                empresa:
+                  type: string
+                faturamento:
+                  type: string
+                funcionarios:
+                  type: string
+                desafios:
+                  type: string
+                tags_add:
+                  type: array
+                  items:
+                    type: string
+                  description: Tags a adicionar (cria se não existir)
+                tags_remove:
+                  type: array
+                  items:
+                    type: string
+                  description: Tags a remover
+                note:
+                  type: string
+                  description: Nota a adicionar
+      responses:
+        '200':
+          description: Contato atualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  dnia_id:
+                    type: string
+                    format: uuid
+                  updated_fields:
+                    type: array
+                    items:
+                      type: string
+                  lead_score:
+                    type: integer
+                  etiqueta:
+                    type: string
+                    nullable: true
+        '404':
+          description: Contato não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /contact-status-update:
+    patch:
+      operationId: contactStatusUpdate
+      summary: Atualizar status do contato
+      description: |
+        Atualiza o status do lead identificado por `dnia_id`. Registra evento
+        `contact_updated` na timeline e, quando o status for `Lead Qualificado`,
+        dispara o handoff para o Nexus CRM (avança stage para `opportunity` e
+        registra evento `lead_qualified`). Requer permissão write.
+      tags:
+        - Contatos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dnia_id, status]
+              properties:
+                dnia_id:
+                  type: string
+                  format: uuid
+                  description: Identificador único do contato no ecossistema
+                status:
+                  type: string
+                  enum:
+                    - Lead
+                    - Lead Qualificado
+                    - MQL - Reunião agendada
+                    - SQL - Em negociação
+                    - Venda realizada
+                    - Em contrato
+                    - Iniciado
+      responses:
+        '200':
+          description: Status atualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  dnia_id:
+                    type: string
+                    format: uuid
+                  lead_id:
+                    type: string
+                    format: uuid
+                  status_anterior:
+                    type: string
+                    nullable: true
+                  status_atual:
+                    type: string
+        '400':
+          description: Payload inválido (dnia_id/status ausente ou status fora da lista permitida)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Token inválido ou sem permissão de escrita
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: dnia_id não encontrado ou sem lead vinculado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /contact-tags-sync:
+    put:
+      operationId: contactTagsSync
+      summary: Sincronizar tags do contato (substituição total)
+      description: |
+        Espelha o conjunto completo de tags de um contato. A origem (ex: Nexus)
+        envia **todas** as tags do contato; o endpoint adiciona as novas, mantém
+        as existentes e remove as que não vieram. Use `tags: []` para limpar
+        todas as tags. Tags inexistentes são criadas automaticamente.
+        Aceita também `POST` com a mesma semântica (substituição total).
+        Registra evento `tags_synced` na timeline. Requer permissão write.
+      tags:
+        - Contatos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tags]
+              properties:
+                dnia_id:
+                  type: string
+                  format: uuid
+                  description: Identificador único do contato (preferencial)
+                nexus_contact_id:
+                  type: string
+                  format: uuid
+                  description: ID do contato no Nexus CRM (alternativo ao dnia_id)
+                email:
+                  type: string
+                  format: email
+                  description: Email do contato (fallback se nenhum ID for fornecido)
+                tags:
+                  type: array
+                  description: Lista completa de tags do contato. Strings são normalizadas (trim, lowercase). Use [] para remover todas.
+                  items:
+                    type: string
+                  example: ["cliente-vip", "evento-maio", "interessado-formacao"]
+      responses:
+        '200':
+          description: Tags sincronizadas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  dnia_id:
+                    type: string
+                    format: uuid
+                    nullable: true
+                  lead_id:
+                    type: string
+                    format: uuid
+                  tags_final:
+                    type: array
+                    items:
+                      type: string
+                  added:
+                    type: array
+                    items:
+                      type: string
+                  removed:
+                    type: array
+                    items:
+                      type: string
+                  kept:
+                    type: array
+                    items:
+                      type: string
+                  created_tags:
+                    type: array
+                    description: Tags criadas no banco por não existirem
+                    items:
+                      type: string
+        '400':
+          description: Payload inválido (sem identificador ou tags não é array)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Token inválido ou sem permissão de escrita
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Contato não encontrado ou sem lead vinculado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: contactTagsSyncPost
+      summary: Sincronizar tags do contato (alias POST)
+      description: |
+        Alias `POST` para `PUT /contact-tags-sync`. Mesma semântica de
+        substituição total. Útil para clientes/CRMs que não suportam PUT.
+      tags:
+        - Contatos
+      requestBody:
+        $ref: '#/paths/~1contact-tags-sync/put/requestBody'
+      responses:
+        '200':
+          $ref: '#/paths/~1contact-tags-sync/put/responses/200'
+        '400':
+          $ref: '#/paths/~1contact-tags-sync/put/responses/400'
+        '401':
+          $ref: '#/paths/~1contact-tags-sync/put/responses/401'
+        '404':
+          $ref: '#/paths/~1contact-tags-sync/put/responses/404'
+
+  /segments-api:
+    get:
+      operationId: segmentsList
+      summary: Listar segmentos
+      description: Lista segmentos com contagem de contatos e paginação.
+      tags:
+        - Segmentos
+      parameters:
+        - name: id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: ID do segmento para detalhes
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [dynamic, static]
+          description: Filtro por tipo
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Lista de segmentos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        name:
+                          type: string
+                        type:
+                          type: string
+                        rules:
+                          type: array
+                        contacts_count:
+                          type: integer
+                        created_at:
+                          type: string
+                          format: date-time
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          description: Token inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: segmentsCreate
+      summary: Criar segmento
+      description: |
+        Cria um novo segmento. Para estáticos, envie contact_ids.
+        Use action=add_contacts&id=uuid para adicionar contatos a um segmento estático existente.
+      tags:
+        - Segmentos
+      parameters:
+        - name: action
+          in: query
+          schema:
+            type: string
+            enum: [add_contacts]
+          description: Ação especial
+        - name: id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: ID do segmento (para add_contacts)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                type:
+                  type: string
+                  enum: [dynamic, static]
+                rules:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      field:
+                        type: string
+                      operator:
+                        type: string
+                      value:
+                        type: string
+                contact_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                  description: IDs dos contatos (para segmentos estáticos)
+      responses:
+        '201':
+          description: Segmento criado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  segment:
+                    type: object
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /campaigns-api:
+    get:
+      operationId: campaignsList
+      summary: Listar campanhas
+      description: Lista campanhas com stats e paginação.
+      tags:
+        - Campanhas
+      parameters:
+        - name: id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: ID da campanha para detalhes
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, sent, sending]
+        - name: channel
+          in: query
+          schema:
+            type: string
+            enum: [email, whatsapp]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Lista de campanhas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        name:
+                          type: string
+                        channel:
+                          type: string
+                        status:
+                          type: string
+                        segment_name:
+                          type: string
+                          nullable: true
+                        stats:
+                          type: object
+                          description: |
+                            Estatísticas da campanha computadas ao vivo a partir de `campaign_sends`.
+                            Semântica de agregação (roll-ups): `sent` inclui delivered+opened+clicked;
+                            `delivered` inclui opened+clicked; `opened` inclui clicked.
+                            `bounced` e `complained` são novos status alimentados pelo webhook do Resend.
+                            Se a agregação ao vivo falhar, retorna o objeto stats armazenado como fallback.
+                          properties:
+                            pending:
+                              type: integer
+                              description: Mensagens pendentes de envio
+                            sent:
+                              type: integer
+                              description: Mensagens enviadas (inclui delivered, opened, clicked)
+                            delivered:
+                              type: integer
+                              description: Mensagens entregues (inclui opened, clicked)
+                            opened:
+                              type: integer
+                              description: Mensagens abertas (inclui clicked)
+                            clicked:
+                              type: integer
+                              description: Mensagens clicadas
+                            bounced:
+                              type: integer
+                              description: Mensagens que devolveram (rejeitadas)
+                            complained:
+                              type: integer
+                              description: Mensagens marcadas como spam
+                            failed:
+                              type: integer
+                              description: Falhas permanentes de envio
+                            unsubscribed:
+                              type: integer
+                              description: Destinatários que se desinscreverem
+                        sent_at:
+                          type: string
+                          format: date-time
+                          nullable: true
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      operationId: campaignsCreate
+      summary: Criar e disparar campanha
+      description: |
+        Cria uma campanha. Se send_now=true, dispara imediatamente.
+        Use action=send&id=uuid para enviar uma campanha em draft.
+      tags:
+        - Campanhas
+      parameters:
+        - name: action
+          in: query
+          schema:
+            type: string
+            enum: [send]
+        - name: id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - channel
+              properties:
+                name:
+                  type: string
+                channel:
+                  type: string
+                  enum: [email, whatsapp]
+                segment_id:
+                  type: string
+                  format: uuid
+                subject:
+                  type: string
+                body:
+                  type: string
+                send_now:
+                  type: boolean
+                  default: false
+      responses:
+        '201':
+          description: Campanha criada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  campaign:
+                    type: object
+
+  /pages-api:
+    get:
+      operationId: pagesList
+      summary: Listar páginas com métricas
+      description: Lista todas as páginas com contagem de leads e hotleads.
+      tags:
+        - Páginas
+      parameters:
+        - name: slug
+          in: query
+          schema:
+            type: string
+          description: Slug da página para detalhes
+      responses:
+        '200':
+          description: Lista de páginas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        slug:
+                          type: string
+                        title:
+                          type: string
+                        active:
+                          type: boolean
+                        total_leads:
+                          type: integer
+                        hot_leads:
+                          type: integer
+                        last_lead_at:
+                          type: string
+                          format: date-time
+                          nullable: true
+    post:
+      operationId: pagesCreate
+      summary: Criar página
+      description: Cria uma nova landing page com status inativo.
+      tags:
+        - Páginas
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+                - slug
+              properties:
+                title:
+                  type: string
+                slug:
+                  type: string
+                template_base:
+                  type: string
+                config:
+                  type: object
+      responses:
+        '201':
+          description: Página criada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  page:
+                    type: object
+    patch:
+      operationId: pagesUpdate
+      summary: Atualizar página
+      description: |
+        Atualiza config (merge), status e adiciona UTM presets.
+        Se utm_preset vier, retorna o link UTM gerado.
+      tags:
+        - Páginas
+      parameters:
+        - name: slug
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                config:
+                  type: object
+                active:
+                  type: boolean
+                utm_preset:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    utm_source:
+                      type: string
+                    utm_medium:
+                      type: string
+                    utm_campaign:
+                      type: string
+      responses:
+        '200':
+          description: Página atualizada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  page_slug:
+                    type: string
+                  utm_link:
+                    type: string
+                    nullable: true
+
+  /automations-api:
+    get:
+      operationId: automationsList
+      summary: Listar regras de automação
+      description: Retorna todas as regras de automação.
+      tags:
+        - Automações
+      responses:
+        '200':
+          description: Lista de regras
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        name:
+                          type: string
+                        is_active:
+                          type: boolean
+                        priority:
+                          type: integer
+                        condition_type:
+                          type: string
+                        condition_operator:
+                          type: string
+                        condition_value:
+                          type: string
+                        action_type:
+                          type: string
+                        action_metadata:
+                          type: object
+    post:
+      operationId: automationsCreate
+      summary: Criar regra de automação
+      tags:
+        - Automações
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - condition_type
+                - condition_operator
+                - condition_value
+                - action_type
+              properties:
+                name:
+                  type: string
+                priority:
+                  type: integer
+                condition_type:
+                  type: string
+                condition_operator:
+                  type: string
+                condition_value:
+                  type: string
+                action_type:
+                  type: string
+                action_value:
+                  type: string
+                action_metadata:
+                  type: object
+                is_active:
+                  type: boolean
+      responses:
+        '201':
+          description: Regra criada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  rule:
+                    type: object
+    patch:
+      operationId: automationsUpdate
+      summary: Atualizar regra de automação
+      tags:
+        - Automações
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                is_active:
+                  type: boolean
+                name:
+                  type: string
+                priority:
+                  type: integer
+      responses:
+        '200':
+          description: Regra atualizada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  rule:
+                    type: object
+
+  /register-conversion:
+    post:
+      operationId: registerConversion
+      summary: Registrar conversão de lead
+      description: |
+        Registra uma nova conversão para um lead existente. Atualiza
+        `last_conversion_date` e dispara aplicação de tag automaticamente.
+        Aceita identificação por `lead_id`, `dnia_id`, `email` ou `phone`.
+      tags:
+        - Conversões
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tipo
+                - page_slug
+              properties:
+                lead_id:
+                  type: string
+                  format: uuid
+                  description: ID do lead (alternativa a dnia_id/email/phone)
+                dnia_id:
+                  type: string
+                  format: uuid
+                  description: DN.IA ID do ecossistema (alternativa a lead_id/email/phone)
+                email:
+                  type: string
+                  format: email
+                  description: Email para resolver o lead
+                phone:
+                  type: string
+                  description: Telefone/whatsApp para resolver o lead
+                tipo:
+                  type: string
+                  example: modal_pago
+                page_slug:
+                  type: string
+                  example: pago
+                  description: Vira tag no lead se apply_tag=true
+                session_id:
+                  type: string
+                  nullable: true
+                converted_at:
+                  type: string
+                  format: date-time
+                  nullable: true
+                  description: Default = now()
+                utm_source:
+                  type: string
+                  nullable: true
+                utm_medium:
+                  type: string
+                  nullable: true
+                utm_campaign:
+                  type: string
+                  nullable: true
+                utm_term:
+                  type: string
+                  nullable: true
+                utm_content:
+                  type: string
+                  nullable: true
+                source:
+                  type: string
+                  nullable: true
+                  description: "Origem da conversão (ex: programadeiaficacao)"
+                apply_tag:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: Conversão registrada com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  lead_id:
+                    type: string
+                    format: uuid
+                  conversion:
+                    $ref: '#/components/schemas/Conversion'
+        '400':
+          description: Dados inválidos (tipo/page_slug ausente ou lead não encontrado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Token inválido ou sem permissão de escrita
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /unregister-conversion:
+    delete:
+      operationId: unregisterConversion
+      summary: Remover conversão por session_id
+      description: |
+        Remove uma conversão existente pelo `session_id`. Recalcula
+        automaticamente o `last_conversion_date` do lead com base nas
+        conversões restantes. Registra evento `conversion_unregistered`
+        na timeline do contato para auditoria. Aceita DELETE ou POST.
+      tags:
+        - Conversões
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - session_id
+              properties:
+                session_id:
+                  type: string
+                  description: ID da sessão da conversão a remover
+      responses:
+        '200':
+          description: Conversão removida com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  affected:
+                    type: integer
+                  deleted:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Conversion'
+        '400':
+          description: session_id ausente
+        '401':
+          description: Token inválido ou sem permissão de escrita
+        '404':
+          description: Nenhuma conversão encontrada para o session_id
+
+  /update-conversion:
+    patch:
+      operationId: updateConversion
+      summary: Atualizar converted_at de uma conversão
+      description: |
+        Atualiza o `converted_at` de uma conversão existente pelo `session_id`.
+        Recalcula automaticamente o `last_conversion_date` do lead. Registra
+        evento `conversion_updated` (com valores antigo e novo) na timeline
+        para auditoria. Aceita PATCH ou POST.
+      tags:
+        - Conversões
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - session_id
+                - converted_at
+              properties:
+                session_id:
+                  type: string
+                  description: ID da sessão da conversão a atualizar
+                converted_at:
+                  type: string
+                  format: date-time
+                  description: Nova data/hora da conversão (ISO 8601)
+      responses:
+        '200':
+          description: Conversão atualizada com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  affected:
+                    type: integer
+                  updated:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Conversion'
+        '400':
+          description: session_id ou converted_at ausente/ inválido
+        '401':
+          description: Token inválido ou sem permissão de escrita
+        '404':
+          description: Nenhuma conversão encontrada para o session_id
+
+
+  /analytics-api:
+    get:
+      operationId: analyticsGet
+      summary: KPIs e métricas
+      description: |
+        Retorna métricas agregadas. Use o parâmetro type para escolher o relatório:
+        overview, leads, sources ou pages. Todos suportam filtro de período.
+      tags:
+        - Analytics
+      parameters:
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [overview, leads, sources, pages, daily, funnel, events]
+          description: |
+            Tipo de relatório:
+            - `overview`, `leads`, `sources`, `pages` (legados)
+            - `daily`: KPIs de um dia (params: `date`, `tz`)
+            - `funnel`: lead → qualified → mql → sql → won (params: `period` [today|week|month|custom], `date_from`, `date_to`, `tz`). **Cumulativo**: um mesmo lead pode aparecer em múltiplos stages (semântica padrão de funil). Para contagem exclusiva por estágio, use `type=events` com `event_type` específico.
+            - `events`: contagem de `contact_events` (params: `event_type` CSV, `date_from`, `date_to`, `tz`, `group_by` [none|day|source])
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [7d, 15d, 30d, 90d, all, today, week, month, custom]
+            default: 30d
+          description: Período de análise (depende do `type`).
+        - name: date
+          in: query
+          schema: { type: string, example: "2026-05-28" }
+          description: "Apenas `type=daily`. YYYY-MM-DD no `tz` informado. Default: hoje."
+        - name: date_from
+          in: query
+          schema: { type: string, example: "2026-05-01" }
+          description: "YYYY-MM-DD. Usado por `funnel` (period=custom) e `events`."
+        - name: date_to
+          in: query
+          schema: { type: string, example: "2026-05-28" }
+          description: "YYYY-MM-DD. Usado por `funnel` (period=custom) e `events`."
+        - name: tz
+          in: query
+          schema: { type: string, default: America/Sao_Paulo }
+          description: Timezone IANA aplicado a todos os parâmetros de data.
+        - name: event_type
+          in: query
+          schema: { type: string, example: "meeting_scheduled,deal_won" }
+          description: "Obrigatório para `type=events`. Lista CSV de event_types."
+        - name: group_by
+          in: query
+          schema:
+            type: string
+            enum: [none, day, source]
+            default: none
+          description: "Apenas `type=events`. Agrupamento opcional."
+      responses:
+        '200':
+          description: Métricas
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    title: Overview
+                    properties:
+                      total_leads:
+                        type: integer
+                      hotleads:
+                        type: integer
+                      warm_leads:
+                        type: integer
+                      leads_hoje:
+                        type: integer
+                      leads_semana:
+                        type: integer
+                      score_medio:
+                        type: integer
+                      taxa_hotlead:
+                        type: string
+                      leads_no_nexus:
+                        type: integer
+                      clientes_ativos:
+                        type: integer
+                  - type: object
+                    title: Leads por dia
+                    properties:
+                      period:
+                        type: string
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            date:
+                              type: string
+                            total:
+                              type: integer
+                            hotleads:
+                              type: integer
+                  - type: object
+                    title: Por origem
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            utm_source:
+                              type: string
+                            total:
+                              type: integer
+                            hotleads:
+                              type: integer
+                            taxa_hot:
+                              type: string
+                  - type: object
+                    title: Daily KPIs
+                    description: |
+                      Resposta de `type=daily`. Métricas de um único dia no `tz` informado.
+                      - `new_leads`: leads criados no dia.
+                      - `mql_from_existing`: leads antigos (criados antes do dia) que viraram MQL hoje (reconversões).
+                      - `mql_total`: total distinto de leads com conversão `mql_reuniao_agendada` no dia (novos + reconversões). **Use este campo para o número real de MQLs do dia.**
+                      - `by_status["MQL - Reunião agendada"]`: apenas leads NOVOS que já entraram como MQL (não inclui reconversões).
+                    properties:
+                      new_leads:
+                        type: integer
+                        description: Leads criados no dia.
+                      meetings_scheduled:
+                        type: integer
+                        description: Eventos `scheduling_widget_booked` ou `meeting_scheduled` no dia.
+                      deals_won:
+                        type: integer
+                      deals_lost:
+                        type: integer
+                      mql_from_existing:
+                        type: integer
+                        description: Leads criados antes do dia que viraram MQL hoje (reconversões).
+                      mql_total:
+                        type: integer
+                        description: Total distinto de leads com conversão `mql_reuniao_agendada` no dia (novos + reconversões).
+                      by_status:
+                        type: object
+                        additionalProperties: { type: integer }
+                        description: Distribuição de leads NOVOS por status final no dia.
+                      by_source:
+                        type: object
+                        additionalProperties: { type: integer }
+                        description: Distribuição de leads NOVOS por utm_source no dia.
+        '401':
+          description: Token inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
